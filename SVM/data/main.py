@@ -57,6 +57,61 @@ def training(mode, H_train, Y_train, H_test, Y_test):
         
     return score_list, arg_C_list, SVM_info_list
 
+def store_lists(args_list, score_list):
+    # 下面几行是把list存下来（存在.pkl文件里面）
+    with open(f'./pickles/{mode}_score_list', 'wb') as file_handle:
+        pickle.dump(score_list, file_handle)
+    with open(f'./pickles/{mode}_args_list', 'wb') as file_handle:
+        pickle.dump(args_list, file_handle)
+
+def plot_C(args_list, score_list, mode):
+    # 使用 matplotlib 画图
+    plt.figure(figsize=(10, 6))
+    # 使用采样点作为横坐标， 不然图不好看
+    plt.plot(range(len(args_list)), score_list, marker='o', linestyle='-')
+
+    plt.xticks(range(len(args_list)), ['{:.2f}'.format(c) for c in args_list])  
+    plt.title(f'{mode} SVC Accuracy vs. Regularization Parameter C') 
+    plt.xlabel('C parameter value')
+    plt.ylabel('Accuracy score') 
+
+    # 设置横坐标显示到小数点后三位
+    plt.gca().xaxis.set_major_formatter(FormatStrFormatter('%.3f'))
+    # 旋转刻度， 使其更易读
+    plt.xticks(rotation=45)
+    # 显示网格线
+    plt.grid(True)
+    plt.show()
+
+def plot_sv_num(args_list, SVM_info_list, mode):
+    support_vectors_counts = []
+
+    for svm_info in SVM_info_list:
+        dual_coefs_times_label = svm_info.dual_coefs_times_label
+
+        # 计算每个模型中alpha > 0的支持向量数量
+        # 这里我们假设二分类问题，dual_coef_是一个一行的2D数组
+        print("dual_coefs : " , dual_coefs_times_label[0])
+        support_vectors_count = sum(coef > 0 for coef in dual_coefs_times_label[0])
+        
+        support_vectors_counts.append(support_vectors_count)
+
+    plt.figure(figsize=(10, 6))
+
+    print("args_list : ", args_list)
+    print("support_vectors_counts : ", support_vectors_counts)
+
+    plt.plot(range(len(args_list)), support_vectors_counts, marker='o', linestyle='-')
+
+    plt.xticks(range(len(args_list)), [f'{c:.2f}' for c in args_list], rotation=45)
+
+    plt.title(f'Number of Support Vectors vs. Regularization Parameter C (kernel: {mode})')
+    plt.xlabel('C parameter value')
+    plt.ylabel('Number of Support Vectors')
+    plt.grid(True)
+    plt.savefig('./pickles/sv_num.png')
+    plt.show()
+
 if __name__ == '__main__':
 ######################## Get train/test dataset ########################
     X_train,X_test,Y_train,Y_test = get_data('dataset')
@@ -77,52 +132,8 @@ if __name__ == '__main__':
     print('args : ', args_list)
     print('score : ', score_list)
 
-    # # 下面几行是把list存下来（存在.pkl文件里面）
-    # with open(f'./pickles/{mode}_score_list', 'wb') as file_handle:
-    #     pickle.dump(score_list, file_handle)
-    # with open(f'./pickles/{mode}_args_list', 'wb') as file_handle:
-    #     pickle.dump(args_list, file_handle)
+    store_lists(args_list, score_list)
 
-    # # 使用 matplotlib 画图
-    # plt.figure(figsize=(10, 6))
-    # # 使用采样点作为横坐标， 不然图不好看
-    # plt.plot(range(len(args_list)), score_list, marker='o', linestyle='-')
-
-    # plt.xticks(range(len(args_list)), ['{:.2f}'.format(c) for c in args_list])  
-    # plt.title(f'{mode} SVC Accuracy vs. Regularization Parameter C') 
-    # plt.xlabel('C parameter value')
-    # plt.ylabel('Accuracy score') 
-
-    # # 设置横坐标显示到小数点后三位
-    # plt.gca().xaxis.set_major_formatter(FormatStrFormatter('%.3f'))
-    # # 旋转刻度， 使其更易读
-    # plt.xticks(rotation=45)
-    # # 显示网格线
-    # plt.grid(True)
-    # for i, index in enumerate(support_vectors_with_positive_alpha[:5]):  # 只显示前5个
-    #     plt.subplot(1, 5, i + 1)  # 创建子图
-    #     plt.imshow(X_train[index].reshape(42, 42), cmap='gray')
-    #     plt.axis('off')  # 关闭坐标轴
-    # plt.show()
+    #plot_C(args_list, score_list, mode)
+    plot_sv_num(args_list, SVM_info_list, mode)
     
-    # Plot the support vectors - this should be a separate plot, not on the same plot as the accuracy scores
-    for svm_info in SVM_info_list:
-        # 获取这个模型的支持向量索引
-        support_vector_indices = svm_info.support_vector_indices
-        # 获取dual_coef_ (这里假设dual_coefs_times_label是一个2D数组，其中每一行对应一个类)
-        dual_coefs_times_label = svm_info.dual_coefs_times_label
-
-        # 计算正的alpha值的支持向量
-        # We assume that for binary classification dual_coefs_times_label has only one row
-        # Hence, we take the first and only row by dual_coefs_times_label[0]
-        support_vectors_with_positive_alpha = [index for index, coef in zip(support_vector_indices, dual_coefs_times_label[0]) if coef > 0]
-
-        # 可视化具有正alpha值的前5个支持向量的图像
-        plt.figure(figsize=(15, 3))
-        for i, index in enumerate(support_vectors_with_positive_alpha[:5]):  # Show first 5
-            plt.subplot(1, 5, i + 1)
-            image = X_train[index].reshape(42, 42)  # Assuming X_train is a flat array
-            plt.imshow(image, cmap='gray')
-            plt.title(f'Support Vector {i+1}')
-            plt.axis('off')
-        plt.show()

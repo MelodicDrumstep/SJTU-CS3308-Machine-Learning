@@ -10,6 +10,7 @@ import pickle
 
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
+from sklearn.manifold import TSNE
 
 class SVM_info:
     def __init__(self, support_vector_indices, num_support_vectors_each_class, dual_coefs_times_label):
@@ -26,18 +27,24 @@ def fill_arg_gamma_list(arg_C_list):
     arg_C_list.append(100)
     arg_C_list.append(1000)
 
+# 每次批量绘图前先用这个测试一下
+def test_fill(arg_C_list):
+    arg_C_list.append(1)
+
 # 用于训练模型并生成score列表的函数
 def training(mode, H_train, Y_train, H_test, Y_test):
     arg_C_list = []
-    fill_arg_C_list(0.001, 0.01, 0.001, arg_C_list)
-    fill_arg_C_list(0.01, 0.1, 0.02, arg_C_list)
-    fill_arg_C_list(0.1, 1, 0.25, arg_C_list)
-    fill_arg_C_list(1, 10, 5, arg_C_list)
-    fill_arg_gamma_list(arg_C_list)
+    # fill_arg_C_list(0.001, 0.01, 0.005, arg_C_list)
+    # fill_arg_C_list(0.01, 0.1, 0.05, arg_C_list)
+    # fill_arg_C_list(0.1, 1, 0.5, arg_C_list)
+    # fill_arg_C_list(1, 10, 5, arg_C_list)
+    # fill_arg_gamma_list(arg_C_list)
+    test_fill(arg_C_list)
     # 填充参数列表 arg_C_list
 
     score_list = []
     SVM_info_list = []
+    indexed_scores_list = []
     for argC in arg_C_list:
         # 每轮选定一个参数进行训练
         print("inside SVM")
@@ -54,8 +61,14 @@ def training(mode, H_train, Y_train, H_test, Y_test):
         # 这些都是调试信息
         svm_info_temp = SVM_info(svm.support_, svm.n_support_, svm.dual_coef_)
         SVM_info_list.append(svm_info_temp)
+        #experiment(svm_info_temp, argC)
+        # 获取决策函数的值
+        decision_scores = svm.decision_function(H_train)
+        # 结合分类的标签和决策函数，创建一个复合的列表
+        indexed_scores = list(zip(range(len(Y_train)), Y_train, decision_scores))
+        indexed_scores_list.append(indexed_scores)
         
-    return score_list, arg_C_list, SVM_info_list
+    return score_list, arg_C_list, SVM_info_list, indexed_scores_list
 
 def store_lists(args_list, score_list):
     # 下面几行是把list存下来（存在.pkl文件里面）
@@ -83,34 +96,73 @@ def plot_C(args_list, score_list, mode):
     plt.grid(True)
     plt.show()
 
+def experiment(SVM_info, C):
+    # 用于调试的函数
+    print("C : ", C)
+    print("support_vector_indices_length : ", len(SVM_info.support_vector_indices))
+    print("support_vector_indices : ", SVM_info.support_vector_indices)
+    print("num_support_vectors_each_class[0] : ", SVM_info.num_support_vectors_each_class[0])
+    print("num_support_vectors_each_class[1] : ", SVM_info.num_support_vectors_each_class[1])
+    print("dual_coefs_times_label_length : ", len(SVM_info.dual_coefs_times_label))
+    print("dual_coefs_times_label[0] : ", SVM_info.dual_coefs_times_label[0])
+    sum_coef_C = 0
+    for coef in SVM_info.dual_coefs_times_label[0]:
+        #print("coef : ", coef)
+        if(abs(abs(coef) - C) < 1e-5):
+            sum_coef_C += 1
+    print("sum_coef_C : ", sum_coef_C)
+
+
 def plot_sv_num(args_list, SVM_info_list, mode):
+    print("num of SVM_info_list : ", len(SVM_info_list))
     support_vectors_counts = []
-
     for svm_info in SVM_info_list:
-        dual_coefs_times_label = svm_info.dual_coefs_times_label
-
-        # 计算每个模型中alpha > 0的支持向量数量
-        # 这里我们假设二分类问题，dual_coef_是一个一行的2D数组
-        print("dual_coefs : " , dual_coefs_times_label[0])
-        support_vectors_count = sum(coef > 0 for coef in dual_coefs_times_label[0])
-        
-        support_vectors_counts.append(support_vectors_count)
+        print("num of support_vectors_each_class[0] : ", svm_info.num_support_vectors_each_class[0])
+        print("num of support_vectors_each_class[1] : ", svm_info.num_support_vectors_each_class[1])
+        support_vectors_counts.append(svm_info.num_support_vectors_each_class[0] + svm_info.num_support_vectors_each_class[1])
 
     plt.figure(figsize=(10, 6))
 
     print("args_list : ", args_list)
     print("support_vectors_counts : ", support_vectors_counts)
+    # 启用latex
+    plt.rc('text', usetex=True)
 
     plt.plot(range(len(args_list)), support_vectors_counts, marker='o', linestyle='-')
 
     plt.xticks(range(len(args_list)), [f'{c:.2f}' for c in args_list], rotation=45)
 
-    plt.title(f'Number of Support Vectors vs. Regularization Parameter C (kernel: {mode})')
+    plt.title(rf'Number of $\alpha_i > 0$ vectors  vs. Regularization Parameter C (kernel: {mode})')
     plt.xlabel('C parameter value')
-    plt.ylabel('Number of Support Vectors')
+    plt.ylabel(r'Number of $\alpha_i > 0$ vectors')
     plt.grid(True)
-    plt.savefig('./pickles/sv_num.png')
+    plt.savefig(f'./pictures/sv_num_{mode}.png')
     plt.show()
+
+def plot_confidence_vectors(args_list, SVM_info_list, indexed_scores_list, mode):
+    for i in range(0, len(args_list)):
+        plt.figure(figsize=(10, 6))
+        argC = args_list[i]
+        indexed_scores = indexed_scores_list[i]
+        top_positive_samples = sorted([s for s in indexed_scores if s[1] == 1], key=lambda x: -x[2])[:5]
+        top_negative_samples = sorted([s for s in indexed_scores if s[1] == -1], key=lambda x: x[2])[:5]
+        plot_confidence_vectors(top_positive_samples, "positive", argC)
+        plot_confidence_vectors(top_negative_samples, "negative", argC)
+
+
+def plot_confidence_helper(top_samples, label, argC):
+    plt.figure(figsize=(10, 6))
+    indexes = [item[0] for item in top_samples]
+    values = [item[2] for item in top_samples]
+    plt.plot(range(len(indexes)), values, marker='o', linestyle='-')
+
+    plt.title(rf'The top 5 {label} samples that we can classify with confidence, C = {argC}')
+    plt.xlabel('the index of the sample')
+    plt.ylabel(r'The decision value of the sample')
+    plt.grid(True)
+    plt.savefig(f'./pictures/confidence/confidence_{label}_{argC}.png')
+    plt.show()
+
 
 if __name__ == '__main__':
 ######################## Get train/test dataset ########################
@@ -126,7 +178,7 @@ if __name__ == '__main__':
     mode = 'linear'
     #每次只需要改这个mode就行了， 其他地方都会自动替换
     
-    score_list, args_list, SVM_info_list = training(mode, H_train, Y_train, H_test, Y_test)
+    score_list, args_list, SVM_info_list, indexed_scores_list = training(mode, H_train, Y_train, H_test, Y_test)
     # 训练+测试的主要过程
 
     print('args : ', args_list)
@@ -135,5 +187,6 @@ if __name__ == '__main__':
     store_lists(args_list, score_list)
 
     #plot_C(args_list, score_list, mode)
-    plot_sv_num(args_list, SVM_info_list, mode)
+    #plot_sv_num(args_list, SVM_info_list, mode)
+    plot_confidence_vectors(args_list, SVM_info_list, indexed_scores_list, mode)
     

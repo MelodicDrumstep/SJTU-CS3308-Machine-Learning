@@ -12,6 +12,7 @@ from matplotlib import pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 from sklearn.manifold import TSNE
 
+# 用于保存 SVM 模型的相关信息的一个类
 class SVM_info:
     def __init__(self, support_vector_indices, num_support_vectors_each_class, dual_coefs_times_label):
         self.support_vector_indices = support_vector_indices
@@ -34,12 +35,12 @@ def test_fill(arg_C_list):
 # 用于训练模型并生成score列表的函数
 def training(mode, H_train, Y_train, H_test, Y_test):
     arg_C_list = []
-    # fill_arg_C_list(0.001, 0.01, 0.005, arg_C_list)
-    # fill_arg_C_list(0.01, 0.1, 0.05, arg_C_list)
-    # fill_arg_C_list(0.1, 1, 0.5, arg_C_list)
-    # fill_arg_C_list(1, 10, 5, arg_C_list)
-    # fill_arg_gamma_list(arg_C_list)
-    test_fill(arg_C_list)
+    fill_arg_C_list(0.001, 0.01, 0.005, arg_C_list)
+    fill_arg_C_list(0.01, 0.1, 0.05, arg_C_list)
+    fill_arg_C_list(0.1, 1, 0.5, arg_C_list)
+    fill_arg_C_list(1, 10, 5, arg_C_list)
+    fill_arg_gamma_list(arg_C_list)
+    #test_fill(arg_C_list)
     # 填充参数列表 arg_C_list
 
     score_list = []
@@ -70,6 +71,7 @@ def training(mode, H_train, Y_train, H_test, Y_test):
         
     return score_list, arg_C_list, SVM_info_list, indexed_scores_list
 
+# 把list存起来复用的函数
 def store_lists(args_list, score_list):
     # 下面几行是把list存下来（存在.pkl文件里面）
     with open(f'./pickles/{mode}_score_list', 'wb') as file_handle:
@@ -77,6 +79,7 @@ def store_lists(args_list, score_list):
     with open(f'./pickles/{mode}_args_list', 'wb') as file_handle:
         pickle.dump(args_list, file_handle)
 
+# 绘制基础任务的函数， 即分类准确度和 C 的关系
 def plot_C(args_list, score_list, mode):
     # 使用 matplotlib 画图
     plt.figure(figsize=(10, 6))
@@ -96,6 +99,7 @@ def plot_C(args_list, score_list, mode):
     plt.grid(True)
     plt.show()
 
+# 一个实验函数， 看输出性质
 def experiment(SVM_info, C):
     # 用于调试的函数
     print("C : ", C)
@@ -112,7 +116,7 @@ def experiment(SVM_info, C):
             sum_coef_C += 1
     print("sum_coef_C : ", sum_coef_C)
 
-
+# 绘制支持向量个数图的函数
 def plot_sv_num(args_list, SVM_info_list, mode):
     print("num of SVM_info_list : ", len(SVM_info_list))
     support_vectors_counts = []
@@ -139,29 +143,90 @@ def plot_sv_num(args_list, SVM_info_list, mode):
     plt.savefig(f'./pictures/sv_num_{mode}.png')
     plt.show()
 
+# 绘制分类信心最大的5个样本的原图像函数
+def plot_confidence_vectors_origin_picture(X_train, args_list, SVM_info_list, indexed_scores_list, mode):
+    for i in range(0, len(args_list)):
+        plt.figure(figsize=(10, 6))
+        argC = args_list[i]
+        indexed_scores = indexed_scores_list[i]
+        print("indexed_scores :", indexed_scores)
+        top_positive_samples = sorted([s for s in indexed_scores if s[1] == 3], key=lambda x: -x[2])[:5]
+        top_negative_samples = sorted([s for s in indexed_scores if s[1] == 2], key=lambda x: x[2])[:5]
+        print("top_positve_samples :", top_positive_samples)
+
+        plot_confidence_origin_helper(X_train, top_positive_samples, "positive", argC, mode)
+        plot_confidence_origin_helper(X_train, top_negative_samples, "negative", argC, mode)
+
+# 上一个函数的辅助函数， 实现接口封装
+def plot_confidence_origin_helper(X_train, top_samples, label, argC, mode):
+    print("label : ", label)
+    print("argC: " ,argC)
+    indexes = [item[0] for item in top_samples]
+    print("indexes : ", indexes)
+    plt.figure(figsize=(15, 3))
+    plt.suptitle(f'Top 5 {label} Samples with Highest Confidence, C = {argC}, kernel: {mode}', fontsize=20)
+    for i in range(0, len(top_samples)):
+        plt.subplot(1, 5, i + 1)
+        plt.imshow(X_train[indexes[i]], cmap='gray')
+        plt.title(f"Sample {indexes[i]}")
+        plt.axis('off')
+    plt.tight_layout()
+    plt.savefig(f'./pictures/confidence/confidence_origin_{mode}.png')
+    #plt.show()
+
+# 绘制分类信心最大的5个样本的决策函数值的函数
 def plot_confidence_vectors(args_list, SVM_info_list, indexed_scores_list, mode):
     for i in range(0, len(args_list)):
         plt.figure(figsize=(10, 6))
         argC = args_list[i]
         indexed_scores = indexed_scores_list[i]
-        top_positive_samples = sorted([s for s in indexed_scores if s[1] == 1], key=lambda x: -x[2])[:5]
-        top_negative_samples = sorted([s for s in indexed_scores if s[1] == -1], key=lambda x: x[2])[:5]
-        plot_confidence_vectors(top_positive_samples, "positive", argC)
-        plot_confidence_vectors(top_negative_samples, "negative", argC)
+        print("indexed_scores :", indexed_scores)
+        top_positive_samples = sorted([s for s in indexed_scores if s[1] == 3], key=lambda x: -x[2])[:5]
+        top_negative_samples = sorted([s for s in indexed_scores if s[1] == 2], key=lambda x: x[2])[:5]
+        print("top_positve_samples :", top_positive_samples)
 
+        plot_confidence_helper(top_positive_samples, "positive", argC, mode)
+        plot_confidence_helper(top_negative_samples, "negative", argC, mode)
 
-def plot_confidence_helper(top_samples, label, argC):
+# 上一个函数的辅助函数， 实现接口封装
+def plot_confidence_helper(top_samples, label, argC, mode):
+    print("label : ", label)
+    print("argC: " ,argC)
     plt.figure(figsize=(10, 6))
     indexes = [item[0] for item in top_samples]
     values = [item[2] for item in top_samples]
+    print("indexes : ", indexes)
+    print("values : " , values)
     plt.plot(range(len(indexes)), values, marker='o', linestyle='-')
 
-    plt.title(rf'The top 5 {label} samples that we can classify with confidence, C = {argC}')
-    plt.xlabel('the index of the sample')
+    plt.title(rf'The top 5 {label} samples that we can classify with confidence, C = {argC}, kernel : {mode}')
+    plt.xlabel('the 5 samples')
     plt.ylabel(r'The decision value of the sample')
     plt.grid(True)
     plt.savefig(f'./pictures/confidence/confidence_{label}_{argC}.png')
     plt.show()
+
+# 绘制5个支持向量样本图像的函数
+def plot_N_sv_sample(X_train, args_list, SVM_info_list, N, mode):
+    for i in range(0, len(args_list)):
+        argC = args_list[i]
+        svm_info = SVM_info_list[i]
+        support_vector_indices = svm_info.support_vector_indices
+        sv_list = []
+        for i in range(0, N):
+            sv_list.append(support_vector_indices[i])
+
+        print("sv_list : ", sv_list)
+        plt.figure(figsize=(15, 3))
+        plt.suptitle(f'5 Support Vector Sample, C = {argC}, kernel: {mode}', fontsize=20)
+        for i in range(0, N):
+            plt.subplot(1, 5, i + 1)
+            plt.imshow(X_train[sv_list[i]], cmap='gray')
+            plt.title(f"Sample {sv_list[i]}")
+            plt.axis('off')
+        plt.tight_layout()
+        plt.savefig(f'./pictures/sv/sv_{argC}_{mode}.png')
+        #pplt.show()
 
 
 if __name__ == '__main__':
@@ -177,7 +242,6 @@ if __name__ == '__main__':
 
     mode = 'linear'
     #每次只需要改这个mode就行了， 其他地方都会自动替换
-    
     score_list, args_list, SVM_info_list, indexed_scores_list = training(mode, H_train, Y_train, H_test, Y_test)
     # 训练+测试的主要过程
 
@@ -186,7 +250,9 @@ if __name__ == '__main__':
 
     store_lists(args_list, score_list)
 
+    # 以下函数都是画图函数， 依次调试好执行
     #plot_C(args_list, score_list, mode)
     #plot_sv_num(args_list, SVM_info_list, mode)
-    plot_confidence_vectors(args_list, SVM_info_list, indexed_scores_list, mode)
-    
+    #plot_confidence_vectors(args_list, SVM_info_list, indexed_scores_list, mode)
+    #plot_confidence_vectors_origin_picture(X_train, args_list, SVM_info_list, indexed_scores_list, mode)
+    plot_N_sv_sample(X_train, args_list, SVM_info_list, 5, mode)

@@ -9,6 +9,8 @@ from torchvision.transforms.functional import to_pil_image
 from torchvision import transforms 
 from torchvision import datasets  
 import torch.utils.data as Data
+from matplotlib import pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 
 # 定义我们的卷积神经网络
 class CNN(nn.Module):
@@ -111,7 +113,7 @@ class CNN_on_MNIST:
         for epoch in range(self.custom_epochs):
             print("This is epoch ", epoch)
             # 一共 custom_epochs 轮
-            for i, (samples, labels) in enumerate(train_set_loader):
+            for num, (samples, labels) in enumerate(train_set_loader):
                 # 每轮循环先取出训练集的图片和标签
                 
                 output = custom_model(samples.reshape(-1, 1, 28, 28))
@@ -129,9 +131,13 @@ class CNN_on_MNIST:
                 myopt_Adam.step()
                 # 更新参数
 
-                if (i + 1) % 50 == 0:
+                if (num + 1) % 50 == 0:
                     print("Loss becomes {:.4f}".format(loss.item()))
+                    # 隔 50 个样本打印一点信息
+
+                if epoch == 0 and (num + 1) % 2 == 0:
                     self.training_loss_list.append(loss.item())
+                # 便于绘图
             
             print("\n")
 
@@ -143,6 +149,7 @@ class CNN_on_MNIST:
         Accuracy = 0
         length = len(test_set_loader.dataset)
     
+        i = 0
         # 在测试集上每个样本点进行测试
         for data, target in test_set_loader:
             input = data.reshape(-1, 1, 28, 28)
@@ -152,15 +159,44 @@ class CNN_on_MNIST:
             result = output.data.max(1, keepdim = True)[1]
             # 得到模型在测试数据上的结果
 
-            loss_one = loss_prototype(output, target).item()  
-            self.testing_loss_list.append(loss_one)
-            # 计算损失值并加进 list 里面
-            
+            loss_one = loss_prototype(output, target).item() 
+            if (i + 1) % 10 == 0:
+                self.testing_loss_list.append(loss_one)
+            # 计算损失值并加进 list 里面, 便于绘图
+
             Accuracy += result.eq(target.data.view_as(result)).sum() 
             # 更新表示模型准确度的 Accuracy， 
+            i += 1
     
-        print('\n', 'Accuracy is {: .2f}%'.format(100. * Accuracy / length), "\n")
+        print('\n', 'Accuracy is {:.2f}%'.format(100. * Accuracy / length), "\n")
+
+        return 100. * Accuracy / length
         
+# 画图函数
+def drawing_graph(testing_loss_list, training_loss_list):
+    drawing_graph_helper(testing_loss_list, "Testing Loss", 500, 10)
+    drawing_graph_helper(training_loss_list, "Training Loss", 50, 2)
+
+# 画图辅助函数
+def drawing_graph_helper(loss_list, message, stride, interval):
+    # 使用 matplotlib 画图
+    plt.figure(figsize = (10, 6))
+    length = len(loss_list)
+    x = np.arange(0, length * interval, interval)
+
+    plt.plot(x, loss_list, marker = 'o', linestyle = '-')
+
+    plt.xticks(np.arange(0, length * interval, stride))  
+    plt.title(f'{message} curve') 
+    plt.xlabel('sample number')
+    plt.ylabel('loss value') 
+
+    # 旋转刻度， 使其更易读
+    plt.xticks(rotation = 45)
+    # 显示网格线
+    plt.grid(True)
+    plt.show()
+
 
 if __name__ ==  '__main__':
 
@@ -215,17 +251,41 @@ if __name__ ==  '__main__':
         shuffle=True
     )
 
-    # 实例化一个 CNN_on_MNIST
-    My_CNN_on_MNIST = CNN_on_MNIST()
+    accuracy_list = []
 
-    # 进行训练和测试
-    print("---------------Training Start----------")
-    My_CNN_on_MNIST.train(train_loader, My_CNN_on_MNIST.CNNcustom_model, My_CNN_on_MNIST.device)
-    print("---------------Traning End-------------")
+    turns = 10
 
-    print("Testing our model on the TRANING SET: ")
-    My_CNN_on_MNIST.test(train_loader, My_CNN_on_MNIST.CNNcustom_model, My_CNN_on_MNIST.device)
+    for i in range(0, turns):
 
-    print("Testing our model on the TESTING SET: ")
-    My_CNN_on_MNIST.test(test_loader, My_CNN_on_MNIST.CNNcustom_model, My_CNN_on_MNIST.device)
+        print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+        print("This is the ", i, "-th turn")
 
+        # 实例化一个 CNN_on_MNIST
+        My_CNN_on_MNIST = CNN_on_MNIST()
+
+        # 进行训练和测试
+        print("---------------Training Start----------")
+        My_CNN_on_MNIST.train(train_loader, My_CNN_on_MNIST.CNNcustom_model, My_CNN_on_MNIST.device)
+        print("---------------Traning End-------------")
+
+        print("Testing our model on the TRANING SET: ")
+        My_CNN_on_MNIST.test(train_loader, My_CNN_on_MNIST.CNNcustom_model, My_CNN_on_MNIST.device)
+
+        print("Testing our model on the TESTING SET: ")
+        accuracy = My_CNN_on_MNIST.test(test_loader, My_CNN_on_MNIST.CNNcustom_model, My_CNN_on_MNIST.device)
+
+        if i == 0:
+            drawing_graph(My_CNN_on_MNIST.testing_loss_list, My_CNN_on_MNIST.training_loss_list)
+
+        accuracy_list.append(accuracy)
+
+        print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+
+    # 计算均值准确度， 输出
+    sum = 0.0
+    print("Finally,")
+    for i in range(0, turns):
+        print("In the ", i,"-th turn, we have Accuracy {:.2f}%".format(accuracy_list[i]))
+        sum += accuracy_list[i]
+
+    print("And the average accuracy is  {:.2f}%".format(sum / turns))
